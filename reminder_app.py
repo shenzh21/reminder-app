@@ -9,6 +9,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
 import time
+import json
+import os
 from datetime import datetime, timedelta
 from PIL import Image, ImageDraw
 import pystray
@@ -20,6 +22,76 @@ reminder_id_counter = 0
 tray_icon = None
 root = None
 reminder_list_frame = None
+
+# 持久化文件路径（保存在 exe 同目录或脚本同目录下）
+SAVE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reminders.json')
+
+
+def save_reminders():
+    """将当前提醒列表保存到 JSON 文件"""
+    data = []
+    for r in reminders:
+        data.append({
+            'id': r['id'],
+            'hour': r['hour'],
+            'minute': r['minute'],
+            'message': r['message'],
+            'repeat_interval': r['repeat_interval'],
+            'next_trigger': r['next_trigger'].strftime('%Y-%m-%d %H:%M:%S') if r['next_trigger'] else None,
+        })
+    try:
+        with open(SAVE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def load_reminders():
+    """从 JSON 文件加载提醒列表，自动跳过已过期的一次性提醒"""
+    global reminder_id_counter, reminders
+    if not os.path.exists(SAVE_FILE):
+        return
+    try:
+        with open(SAVE_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        return
+
+    now = datetime.now()
+    loaded = []
+    for item in data:
+        next_trigger = None
+        if item.get('next_trigger'):
+            try:
+                next_trigger = datetime.strptime(item['next_trigger'], '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                continue
+
+        repeat_interval = item['repeat_interval']
+
+        # 一次性提醒：如果下次触发时间已过，则跳过不加载
+        if repeat_interval is None:
+            if next_trigger is None or next_trigger <= now:
+                continue
+        else:
+            # 重复提醒：如果下次触发时间已过，重新计算
+            if next_trigger is not None and next_trigger <= now:
+                next_trigger = compute_next_trigger(item['hour'], item['minute'], repeat_interval)
+                if next_trigger is None:
+                    continue
+
+        loaded.append({
+            'id': item['id'],
+            'hour': item['hour'],
+            'minute': item['minute'],
+            'message': item['message'],
+            'repeat_interval': repeat_interval,
+            'next_trigger': next_trigger,
+        })
+        if item['id'] > reminder_id_counter:
+            reminder_id_counter = item['id']
+
+    reminders = loaded
 
 
 def create_tray_icon_image():
@@ -121,9 +193,21 @@ def reminder_checker():
                 else:
                     # 计算下一次触发时间
                     r['next_trigger'] = r['next_trigger'] + timedelta(minutes=r['repeat_interval'])
+                    r['_updated'] = True
+        has_updates = False
         for r in to_remove:
             reminders.remove(r)
+            has_updates = True
             root.after(0, refresh_reminder_list)
+        # 重复提醒触发后也需要保存更新后的下次触发时间
+        if not has_updates:
+            for r in reminders:
+                if '_updated' in r:
+                    del r['_updated']
+                    has_updates = True
+                    break
+        if has_updates:
+            save_reminders()
         time.sleep(1)
 
 
@@ -163,6 +247,7 @@ def add_reminder():
         'repeat_interval': repeat_interval,
         'next_trigger': next_trigger,
     })
+    save_reminders()
     refresh_reminder_list()
     msg_entry.delete(0, tk.END)
 
@@ -171,6 +256,7 @@ def delete_reminder(rid):
     """删除指定提醒"""
     global reminders
     reminders = [r for r in reminders if r['id'] != rid]
+    save_reminders()
     refresh_reminder_list()
 
 
@@ -341,6 +427,10 @@ def build_ui():
 def main():
     global root
     app = build_ui()
+
+    # 加载持久化的提醒数据
+    load_reminders()
+    refresh_reminder_list()
 
     # 启动系统托盘
     setup_tray()

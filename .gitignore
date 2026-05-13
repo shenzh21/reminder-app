@@ -18,6 +18,9 @@ env/
 .vscode/
 .idea/
 *.swp
+
+# 运行时生成的数据文件
+reminders.json
 *.swo
 
 # 系统文件

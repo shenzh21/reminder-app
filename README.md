@@ -8,6 +8,7 @@
 - **重复提醒** — 从指定时间起，每 30 分钟或每 1 小时循环提醒
 - **系统托盘** — 关闭窗口后最小化到托盘，右键图标可恢复或退出
 - **提醒弹窗** — 置顶弹窗 + 声音提示，确保不遗漏
+- **数据持久化** — 提醒数据自动保存，重启应用后自动恢复
 
 ## 📸 截图
 
@@ -23,6 +24,12 @@
 ### 从源码运行
 
 ```bash
+# 创建虚拟环境
+python -m venv .venv
+
+# 激活虚拟环境
+.venv\Scripts\activate
+
 # 安装依赖
 pip install -r requirements.txt
 
@@ -33,7 +40,7 @@ python reminder_app.py
 ### 打包为 exe
 
 ```bash
-pip install pyinstaller
+# 激活虚拟环境后
 pyinstaller --onefile --windowed --name "定时提醒" reminder_app.py
 ```
 

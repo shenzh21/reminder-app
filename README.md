@@ -11,7 +11,8 @@
 
 ## 📸 截图
 
-> 可自行添加应用截图
+<img width="964" height="1104" alt="image" src="https://github.com/user-attachments/assets/1eee60fe-40a9-477c-88fe-5568770b0ecd" />
+
 
 ## 🚀 使用方法
 

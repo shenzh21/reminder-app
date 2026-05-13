@@ -46,6 +46,7 @@ def save_reminders():
             'minute': r['minute'],
             'message': r['message'],
             'repeat_interval': r['repeat_interval'],
+            'enabled': r.get('enabled', True),
             'next_trigger': r['next_trigger'].strftime('%Y-%m-%d %H:%M:%S') if r['next_trigger'] else None,
         })
     try:
@@ -95,6 +96,7 @@ def load_reminders():
             'minute': item['minute'],
             'message': item['message'],
             'repeat_interval': repeat_interval,
+            'enabled': item.get('enabled', True),
             'next_trigger': next_trigger,
         })
         if item['id'] > reminder_id_counter:
@@ -196,6 +198,9 @@ def reminder_checker():
         now = datetime.now()
         to_remove = []
         for r in reminders:
+            # 已关闭的提醒跳过检查
+            if not r.get('enabled', True):
+                continue
             if r['next_trigger'] is None:
                 to_remove.append(r)
                 continue
@@ -258,6 +263,7 @@ def add_reminder():
         'minute': minute,
         'message': message,
         'repeat_interval': repeat_interval,
+        'enabled': True,
         'next_trigger': next_trigger,
     })
     save_reminders()
@@ -273,6 +279,22 @@ def delete_reminder(rid):
     refresh_reminder_list()
 
 
+def toggle_reminder(rid):
+    """切换提醒的启用/关闭状态"""
+    for r in reminders:
+        if r['id'] == rid:
+            r['enabled'] = not r.get('enabled', True)
+            # 重新启用时，重新计算下次触发时间
+            if r['enabled']:
+                r['next_trigger'] = compute_next_trigger(r['hour'], r['minute'], r['repeat_interval'])
+                if r['next_trigger'] is None:
+                    # 一次性提醒已过期，保持关闭
+                    r['enabled'] = False
+            break
+    save_reminders()
+    refresh_reminder_list()
+
+
 def refresh_reminder_list():
     """刷新提醒列表显示"""
     for widget in reminder_list_frame.winfo_children():
@@ -284,16 +306,32 @@ def refresh_reminder_list():
         return
 
     for r in reminders:
-        row = tk.Frame(reminder_list_frame, bg='#FAFAFA')
+        is_enabled = r.get('enabled', True)
+        row_bg = '#FAFAFA' if is_enabled else '#F0F0F0'
+        fg_color = '#333333' if is_enabled else '#AAAAAA'
+
+        row = tk.Frame(reminder_list_frame, bg=row_bg)
         row.pack(fill='x', padx=10, pady=3)
 
         repeat_str = "仅一次" if r['repeat_interval'] is None else f"每{r['repeat_interval']}分钟"
-        next_str = r['next_trigger'].strftime("%H:%M:%S") if r['next_trigger'] else "已过期"
-        text = f"⏰ {r['hour']:02d}:{r['minute']:02d} | {repeat_str} | 下次: {next_str} | {r['message']}"
+        if is_enabled:
+            next_str = r['next_trigger'].strftime("%H:%M:%S") if r['next_trigger'] else "已过期"
+        else:
+            next_str = "已暂停"
+        text = f"⏰ {r['hour']:02d}:{r['minute']:02d} | {repeat_str} | {next_str} | {r['message']}"
 
-        tk.Label(row, text=text, font=("微软雅黑", 9), bg='#FAFAFA', anchor='w').pack(side='left', fill='x', expand=True)
-        tk.Button(row, text="✕", font=("微软雅黑", 9), fg='red', bg='#FAFAFA',
+        tk.Label(row, text=text, font=("微软雅黑", 9), bg=row_bg, fg=fg_color,
+                 anchor='w').pack(side='left', fill='x', expand=True)
+
+        # 删除按钮
+        tk.Button(row, text="✕", font=("微软雅黑", 9), fg='red', bg=row_bg,
                   relief='flat', command=lambda rid=r['id']: delete_reminder(rid)).pack(side='right')
+
+        # 开关按钮
+        toggle_text = "⏸" if is_enabled else "▶"
+        toggle_fg = '#E6A817' if is_enabled else '#4A90D9'
+        tk.Button(row, text=toggle_text, font=("微软雅黑", 10), fg=toggle_fg, bg=row_bg,
+                  relief='flat', command=lambda rid=r['id']: toggle_reminder(rid)).pack(side='right', padx=(0, 2))
 
 
 def minimize_to_tray():

@@ -9,6 +9,7 @@
 - **系统托盘** — 关闭窗口后最小化到托盘，右键图标可恢复或退出
 - **提醒弹窗** — 置顶弹窗 + 声音提示，确保不遗漏
 - **数据持久化** — 提醒数据自动保存，重启应用后自动恢复
+- **暂停/恢复** — 可暂停提醒而不删除，恢复后自动计算下次触发时间
 
 ## 📸 截图
 
@@ -41,10 +42,52 @@ python reminder_app.py
 
 ```bash
 # 激活虚拟环境后
-pyinstaller --onedir --windowed --name "定时提醒" reminder_app.py
+pyinstaller --clean --onedir --windowed --name "定时提醒" ^
+  --exclude-module PIL.BufrStubImagePlugin ^
+  --exclude-module PIL.FitsStubImagePlugin ^
+  --exclude-module PIL.GribStubImagePlugin ^
+  --exclude-module PIL.Hdf5StubImagePlugin ^
+  --exclude-module PIL.McIdasImagePlugin ^
+  --exclude-module PIL.MicImagePlugin ^
+  --exclude-module PIL.SpiderImagePlugin ^
+  --exclude-module PIL.SgiImagePlugin ^
+  --exclude-module PIL.FpxImagePlugin ^
+  --exclude-module PIL.IcnsImagePlugin ^
+  --exclude-module PIL.PalmImagePlugin ^
+  --exclude-module PIL.PcdImagePlugin ^
+  --exclude-module PIL.PcxImagePlugin ^
+  --exclude-module PIL.PsdImagePlugin ^
+  --exclude-module PIL.TgaImagePlugin ^
+  --exclude-module PIL.XpmImagePlugin ^
+  --exclude-module PIL.XbmImagePlugin ^
+  --exclude-module PIL.IptcImagePlugin ^
+  --exclude-module PIL.ImtImagePlugin ^
+  --exclude-module PIL.DcxImagePlugin ^
+  --exclude-module PIL.EpsImagePlugin ^
+  --exclude-module PIL.FliImagePlugin ^
+  --exclude-module PIL.FtexImagePlugin ^
+  --exclude-module PIL.GbrImagePlugin ^
+  --exclude-module PIL.ImImagePlugin ^
+  --exclude-module PIL.Jpeg2KImagePlugin ^
+  --exclude-module PIL.MpegImagePlugin ^
+  --exclude-module PIL.MpoImagePlugin ^
+  --exclude-module PIL.PixarImagePlugin ^
+  --exclude-module PIL.PpmImagePlugin ^
+  --exclude-module PIL.PdfImagePlugin ^
+  --exclude-module tkinter.test ^
+  --exclude-module unittest ^
+  --exclude-module pydoc ^
+  --exclude-module curses ^
+  reminder_app.py
 ```
 
 打包后的应用位于 `dist/定时提醒/` 文件夹，入口为 `dist/定时提醒/定时提醒.exe`。
+
+> 📌 **打包说明**
+> - 使用 `--onedir` 模式（非 `--onefile`），启动更快，无需每次解压临时目录
+> - 排除了不需要的 Pillow 图片格式插件和标准库模块，减小体积
+> - 图标已预嵌入为 base64，运行时无需 `ImageDraw` 模块
+> - 如需分发包，将 `dist/定时提醒/` 文件夹压缩为 zip 上传即可
 
 ## 🕐 重复提醒示例
 

@@ -1,0 +1,356 @@
+"""
+定时提醒应用
+- 支持指定时间一次性提醒
+- 支持指定时间点 + 重复间隔（每30分钟/每1小时）
+- 支持最小化到系统托盘
+"""
+
+import tkinter as tk
+from tkinter import ttk, messagebox
+import threading
+import time
+from datetime import datetime, timedelta
+from PIL import Image, ImageDraw
+import pystray
+import winsound
+
+# ── 全局状态 ──────────────────────────────────────────────
+reminders = []        # 存储所有提醒
+reminder_id_counter = 0
+tray_icon = None
+root = None
+reminder_list_frame = None
+
+
+def create_tray_icon_image():
+    """生成系统托盘图标（一个带时钟样式的简单图标）"""
+    width, height = 64, 64
+    image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+    dc = ImageDraw.Draw(image)
+    # 外圈
+    dc.ellipse([4, 4, 60, 60], fill='#4A90D9', outline='#2C5F9E', width=2)
+    # 时针
+    dc.line([32, 32, 32, 14], fill='white', width=3)
+    # 分针
+    dc.line([32, 32, 46, 26], fill='white', width=2)
+    # 中心点
+    dc.ellipse([28, 28, 36, 36], fill='white')
+    return image
+
+
+def show_reminder_popup(title, message):
+    """弹出提醒窗口（在新线程中运行，避免阻塞）"""
+    def _show():
+        try:
+            winsound.Beep(1000, 300)
+        except Exception:
+            pass
+
+        popup = tk.Toplevel(root)
+        popup.title(title)
+        popup.geometry("400x200")
+        popup.resizable(False, False)
+        popup.attributes("-topmost", True)
+        popup.configure(bg='#F0F4FF')
+
+        # 居中显示
+        popup.update_idletasks()
+        x = (popup.winfo_screenwidth() - 400) // 2
+        y = (popup.winfo_screenheight() - 200) // 2
+        popup.geometry(f"400x200+{x}+{y}")
+
+        # 提醒图标
+        icon_label = tk.Label(popup, text="⏰", font=("Segoe UI Emoji", 36), bg='#F0F4FF')
+        icon_label.pack(pady=(15, 0))
+
+        # 提醒内容
+        msg_label = tk.Label(popup, text=message, font=("微软雅黑", 14), bg='#F0F4FF', wraplength=360)
+        msg_label.pack(pady=(5, 10))
+
+        # 确认按钮
+        btn = tk.Button(popup, text="知道了", font=("微软雅黑", 11), width=10,
+                        command=popup.destroy, bg='#4A90D9', fg='white',
+                        activebackground='#2C5F9E', activeforeground='white', relief='flat')
+        btn.pack(pady=(0, 10))
+
+        popup.focus_force()
+
+    root.after(0, _show)
+
+
+def compute_next_trigger(base_hour, base_minute, repeat_interval):
+    """
+    根据基准时间和重复间隔，计算下一次触发时间。
+    repeat_interval: None (不重复), 30 (每30分钟), 60 (每60分钟)
+    返回 datetime 或 None（表示已过今天且不重复）
+    """
+    now = datetime.now()
+    today_target = now.replace(hour=base_hour, minute=base_minute, second=0, microsecond=0)
+
+    if repeat_interval is None:
+        # 一次性提醒
+        if today_target > now:
+            return today_target
+        else:
+            return None  # 已过时间，不再提醒
+
+    # 重复提醒：找到下一个触发点
+    if today_target > now:
+        return today_target
+
+    # 已过了今天的基准时间，按间隔往后推
+    elapsed_minutes = (now - today_target).total_seconds() / 60
+    intervals_passed = int(elapsed_minutes / repeat_interval) + 1
+    next_trigger = today_target + timedelta(minutes=intervals_passed * repeat_interval)
+    return next_trigger
+
+
+def reminder_checker():
+    """后台线程：每秒检查是否有提醒需要触发"""
+    while True:
+        now = datetime.now()
+        to_remove = []
+        for r in reminders:
+            if r['next_trigger'] is None:
+                to_remove.append(r)
+                continue
+            if now >= r['next_trigger']:
+                show_reminder_popup("⏰ 定时提醒", r['message'])
+                if r['repeat_interval'] is None:
+                    to_remove.append(r)
+                else:
+                    # 计算下一次触发时间
+                    r['next_trigger'] = r['next_trigger'] + timedelta(minutes=r['repeat_interval'])
+        for r in to_remove:
+            reminders.remove(r)
+            root.after(0, refresh_reminder_list)
+        time.sleep(1)
+
+
+# ── GUI 构建 ──────────────────────────────────────────────
+
+def add_reminder():
+    """添加一个新提醒"""
+    global reminder_id_counter
+
+    hour = hour_var.get()
+    minute = minute_var.get()
+    message = msg_entry.get().strip()
+    repeat = repeat_var.get()
+
+    if not message:
+        messagebox.showwarning("提示", "请输入提醒内容！")
+        return
+
+    if repeat == "仅一次":
+        repeat_interval = None
+    elif repeat == "每30分钟":
+        repeat_interval = 30
+    else:
+        repeat_interval = 60
+
+    next_trigger = compute_next_trigger(hour, minute, repeat_interval)
+    if next_trigger is None:
+        messagebox.showinfo("提示", "指定的时间已过，无法设置一次性提醒。")
+        return
+
+    reminder_id_counter += 1
+    reminders.append({
+        'id': reminder_id_counter,
+        'hour': hour,
+        'minute': minute,
+        'message': message,
+        'repeat_interval': repeat_interval,
+        'next_trigger': next_trigger,
+    })
+    refresh_reminder_list()
+    msg_entry.delete(0, tk.END)
+
+
+def delete_reminder(rid):
+    """删除指定提醒"""
+    global reminders
+    reminders = [r for r in reminders if r['id'] != rid]
+    refresh_reminder_list()
+
+
+def refresh_reminder_list():
+    """刷新提醒列表显示"""
+    for widget in reminder_list_frame.winfo_children():
+        widget.destroy()
+
+    if not reminders:
+        tk.Label(reminder_list_frame, text="暂无提醒", font=("微软雅黑", 10),
+                 fg='#999999', bg='#FAFAFA').pack(pady=20)
+        return
+
+    for r in reminders:
+        row = tk.Frame(reminder_list_frame, bg='#FAFAFA')
+        row.pack(fill='x', padx=10, pady=3)
+
+        repeat_str = "仅一次" if r['repeat_interval'] is None else f"每{r['repeat_interval']}分钟"
+        next_str = r['next_trigger'].strftime("%H:%M:%S") if r['next_trigger'] else "已过期"
+        text = f"⏰ {r['hour']:02d}:{r['minute']:02d} | {repeat_str} | 下次: {next_str} | {r['message']}"
+
+        tk.Label(row, text=text, font=("微软雅黑", 9), bg='#FAFAFA', anchor='w').pack(side='left', fill='x', expand=True)
+        tk.Button(row, text="✕", font=("微软雅黑", 9), fg='red', bg='#FAFAFA',
+                  relief='flat', command=lambda rid=r['id']: delete_reminder(rid)).pack(side='right')
+
+
+def minimize_to_tray():
+    """最小化到系统托盘"""
+    root.withdraw()
+
+
+def restore_from_tray(icon, item):
+    """从系统托盘恢复窗口"""
+    root.after(0, root.deiconify)
+
+
+def quit_app(icon=None, item=None):
+    """退出应用"""
+    if tray_icon:
+        tray_icon.stop()
+    root.after(0, root.destroy)
+
+
+def setup_tray():
+    """设置系统托盘图标"""
+    global tray_icon
+    icon_image = create_tray_icon_image()
+    menu = pystray.Menu(
+        pystray.MenuItem("显示主窗口", restore_from_tray),
+        pystray.MenuItem("退出", quit_app),
+    )
+    tray_icon = pystray.Icon("reminder_app", icon_image, "定时提醒", menu)
+    tray_thread = threading.Thread(target=tray_icon.run, daemon=True)
+    tray_thread.start()
+
+
+def on_closing():
+    """点击关闭按钮时最小化到托盘而非退出"""
+    minimize_to_tray()
+
+
+def build_ui():
+    """构建主界面"""
+    global root, hour_var, minute_var, repeat_var, msg_entry, reminder_list_frame
+
+    root = tk.Tk()
+    root.title("⏰ 定时提醒")
+    root.geometry("480x520")
+    root.resizable(False, False)
+    root.configure(bg='#F0F4FF')
+
+    # 居中显示
+    root.update_idletasks()
+    x = (root.winfo_screenwidth() - 480) // 2
+    y = (root.winfo_screenheight() - 520) // 2
+    root.geometry(f"480x520+{x}+{y}")
+
+    # ── 标题 ──
+    title_frame = tk.Frame(root, bg='#4A90D9', height=50)
+    title_frame.pack(fill='x')
+    title_frame.pack_propagate(False)
+    tk.Label(title_frame, text="⏰ 定时提醒", font=("微软雅黑", 16, "bold"),
+             bg='#4A90D9', fg='white').pack(expand=True)
+
+    # ── 设置区域 ──
+    setting_frame = tk.Frame(root, bg='#F0F4FF', padx=15, pady=10)
+    setting_frame.pack(fill='x')
+
+    # 时间选择行
+    time_row = tk.Frame(setting_frame, bg='#F0F4FF')
+    time_row.pack(fill='x', pady=(0, 8))
+
+    tk.Label(time_row, text="提醒时间:", font=("微软雅黑", 11), bg='#F0F4FF').pack(side='left')
+
+    hour_var = tk.IntVar(value=datetime.now().hour)
+    minute_var = tk.IntVar(value=datetime.now().minute)
+
+    hour_spin = tk.Spinbox(time_row, from_=0, to=23, textvariable=hour_var, width=3,
+                           font=("微软雅黑", 12), justify='center')
+    hour_spin.pack(side='left', padx=(5, 2))
+    tk.Label(time_row, text=":", font=("微软雅黑", 14, "bold"), bg='#F0F4FF').pack(side='left')
+    minute_spin = tk.Spinbox(time_row, from_=0, to=59, textvariable=minute_var, width=3,
+                             font=("微软雅黑", 12), justify='center')
+    minute_spin.pack(side='left', padx=(2, 10))
+
+    # 重复选择
+    tk.Label(time_row, text="重复:", font=("微软雅黑", 11), bg='#F0F4FF').pack(side='left')
+    repeat_var = tk.StringVar(value="仅一次")
+    repeat_combo = ttk.Combobox(time_row, textvariable=repeat_var, width=10,
+                                 values=["仅一次", "每30分钟", "每1小时"],
+                                 state='readonly', font=("微软雅黑", 10))
+    repeat_combo.pack(side='left', padx=5)
+
+    # 提醒内容行
+    msg_row = tk.Frame(setting_frame, bg='#F0F4FF')
+    msg_row.pack(fill='x', pady=(0, 8))
+
+    tk.Label(msg_row, text="提醒内容:", font=("微软雅黑", 11), bg='#F0F4FF').pack(side='left')
+    msg_entry = tk.Entry(msg_row, font=("微软雅黑", 11), width=28)
+    msg_entry.pack(side='left', padx=(5, 0), fill='x', expand=True)
+
+    # 添加按钮
+    add_btn = tk.Button(setting_frame, text="➕ 添加提醒", font=("微软雅黑", 11, "bold"),
+                        command=add_reminder, bg='#4A90D9', fg='white',
+                        activebackground='#2C5F9E', activeforeground='white', relief='flat',
+                        cursor='hand2', height=1)
+    add_btn.pack(fill='x', pady=(0, 5))
+
+    # ── 分隔线 ──
+    ttk.Separator(root, orient='horizontal').pack(fill='x', padx=15, pady=5)
+
+    # ── 提醒列表区域 ──
+    tk.Label(root, text="📋 提醒列表", font=("微软雅黑", 12, "bold"),
+             bg='#F0F4FF', anchor='w').pack(fill='x', padx=15, pady=(5, 0))
+
+    list_container = tk.Frame(root, bg='#FAFAFA', bd=1, relief='solid')
+    list_container.pack(fill='both', expand=True, padx=15, pady=(5, 10))
+
+    # 可滚动列表
+    canvas = tk.Canvas(list_container, bg='#FAFAFA', highlightthickness=0)
+    scrollbar = ttk.Scrollbar(list_container, orient='vertical', command=canvas.yview)
+    reminder_list_frame = tk.Frame(canvas, bg='#FAFAFA')
+
+    reminder_list_frame.bind('<Configure>',
+                             lambda e: canvas.configure(scrollregion=canvas.bbox('all')))
+    canvas.create_window((0, 0), window=reminder_list_frame, anchor='nw')
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    canvas.pack(side='left', fill='both', expand=True)
+    scrollbar.pack(side='right', fill='y')
+
+    # ── 底部状态栏 ──
+    status_frame = tk.Frame(root, bg='#E8ECF5', height=30)
+    status_frame.pack(fill='x')
+    status_frame.pack_propagate(False)
+    tk.Label(status_frame, text="💡 关闭窗口将最小化到系统托盘 | 右键托盘图标可退出",
+             font=("微软雅黑", 8), bg='#E8ECF5', fg='#666666').pack(expand=True)
+
+    # 初始显示
+    refresh_reminder_list()
+
+    # 关闭按钮行为
+    root.protocol("WM_DELETE_WINDOW", on_closing)
+
+    return root
+
+
+def main():
+    global root
+    app = build_ui()
+
+    # 启动系统托盘
+    setup_tray()
+
+    # 启动后台提醒检查线程
+    checker = threading.Thread(target=reminder_checker, daemon=True)
+    checker.start()
+
+    app.mainloop()
+
+
+if __name__ == "__main__":
+    main()

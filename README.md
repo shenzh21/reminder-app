@@ -19,7 +19,7 @@
 
 ### 直接运行（无需 Python 环境）
 
-从 [Releases](../../releases) 下载 `定时提醒.exe`，双击即可运行。
+从 [Releases](../../releases) 下载 `定时提醒.zip`，解压后双击 `定时提醒.exe` 即可运行。
 
 ### 从源码运行
 
@@ -41,10 +41,10 @@ python reminder_app.py
 
 ```bash
 # 激活虚拟环境后
-pyinstaller --onefile --windowed --name "定时提醒" reminder_app.py
+pyinstaller --onedir --windowed --name "定时提醒" reminder_app.py
 ```
 
-打包后的 exe 位于 `dist/定时提醒.exe`。
+打包后的应用位于 `dist/定时提醒/` 文件夹，入口为 `dist/定时提醒/定时提醒.exe`。
 
 ## 🕐 重复提醒示例
 

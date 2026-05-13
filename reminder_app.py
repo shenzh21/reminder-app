@@ -11,8 +11,11 @@ import threading
 import time
 import json
 import os
+import sys
+import base64
+import io
 from datetime import datetime, timedelta
-from PIL import Image, ImageDraw
+from PIL import Image
 import pystray
 import winsound
 
@@ -24,7 +27,13 @@ root = None
 reminder_list_frame = None
 
 # 持久化文件路径（保存在 exe 同目录或脚本同目录下）
-SAVE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reminders.json')
+if getattr(sys, 'frozen', False):
+    # PyInstaller 打包后，使用 exe 所在目录
+    _APP_DIR = os.path.dirname(sys.executable)
+else:
+    # 普通 Python 脚本，使用脚本所在目录
+    _APP_DIR = os.path.dirname(os.path.abspath(__file__))
+SAVE_FILE = os.path.join(_APP_DIR, 'reminders.json')
 
 
 def save_reminders():
@@ -95,19 +104,23 @@ def load_reminders():
 
 
 def create_tray_icon_image():
-    """生成系统托盘图标（一个带时钟样式的简单图标）"""
-    width, height = 64, 64
-    image = Image.new('RGBA', (width, height), (0, 0, 0, 0))
-    dc = ImageDraw.Draw(image)
-    # 外圈
-    dc.ellipse([4, 4, 60, 60], fill='#4A90D9', outline='#2C5F9E', width=2)
-    # 时针
-    dc.line([32, 32, 32, 14], fill='white', width=3)
-    # 分针
-    dc.line([32, 32, 46, 26], fill='white', width=2)
-    # 中心点
-    dc.ellipse([28, 28, 36, 36], fill='white')
-    return image
+    """从预嵌入的 base64 数据加载系统托盘图标"""
+    icon_b64 = (
+        'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAB4UlEQVR4nO2bMW6EMBBF'
+        'x1+cI2UqmtQ5AoeIlAvkLLlApD0ER0idhiplLpIIaYmQBcb2GNvj4VWrhcXz/4xt'
+        'WGyii4sLzZicjfUvH7++50631yyxmVoElzLE5BT+8PTsfY2fr88sRpizhYeIDjEj'
+        'lRHmDOEpRPuawTXCpBR/pnCXERwTIFG83R5nsDXShKeuBkgXz60GSBfPNaHjNsZhf'
+        'Hv8/zy8f7OvN8e1d//AroD+7mptmbdZ4vOtArQkPsYE5LyfL8FR/PC9kJTsh8aLlk'
+        'o/piuAlINWs+9bBSDloMWRf48tXXD9QHr5++gAKQcklPVzRFID+spH/1l4jPi92aA'
+        'jAdiCUzw5FjVg3Mjg8t1aXOrH5S06qpAcwosZMB70361KUDcLDJnEV2tATlBbdnNm'
+        'f0Z9BXRUgCXLOUf7KqfBoZBoZxeY7q+WQv9fr51Fj/3qDKQckHLgOthKN3DpQMkV'
+        'WrnZ0gVSDvYOtDIb7I3+CyDlwHVQehUcZT+oAqSZ4Bsvjk6QPiMcxY+Qi0ipAp/S'
+        'D+4CkxATQsRHzwK1mhATF0JOXrtamwmxiyUR2lCNJnBWihpOw6UXTqZYMA1OACWr'
+        'IdVqcZMiGNX7Bdao3TFio3bPkI3aXWOS9g1eXJBu/gA1Lwf5Iv8/vwAAAABJRU5E'
+        'rkJggg=='
+    )
+    icon_data = base64.b64decode(icon_b64)
+    return Image.open(io.BytesIO(icon_data))
 
 
 def show_reminder_popup(title, message):

@@ -84,11 +84,10 @@ def load_reminders():
             if next_trigger is None or next_trigger <= now:
                 continue
         else:
-            # 重复提醒：如果下次触发时间已过，重新计算
+            # 重复提醒：如果下次触发时间已过，从保存的时间往后推
             if next_trigger is not None and next_trigger <= now:
-                next_trigger = compute_next_trigger(item['hour'], item['minute'], repeat_interval)
-                if next_trigger is None:
-                    continue
+                while next_trigger <= now:
+                    next_trigger += timedelta(minutes=repeat_interval)
 
         loaded.append({
             'id': item['id'],
@@ -169,26 +168,23 @@ def compute_next_trigger(base_hour, base_minute, repeat_interval):
     """
     根据基准时间和重复间隔，计算下一次触发时间。
     repeat_interval: None (不重复), 30 (每30分钟), 60 (每60分钟)
-    返回 datetime 或 None（表示已过今天且不重复）
+    返回 datetime 或 None（表示已过且不重复）
     """
     now = datetime.now()
-    today_target = now.replace(hour=base_hour, minute=base_minute, second=0, microsecond=0)
+    base_time = now.replace(hour=base_hour, minute=base_minute, second=0, microsecond=0)
 
     if repeat_interval is None:
-        # 一次性提醒
-        if today_target > now:
-            return today_target
+        # 一次性提醒：精确到某日某时某分，过期则不再提醒
+        if base_time > now:
+            return base_time
         else:
-            return None  # 已过时间，不再提醒
+            return None
 
-    # 重复提醒：找到下一个触发点
-    if today_target > now:
-        return today_target
-
-    # 已过了今天的基准时间，按间隔往后推
-    elapsed_minutes = (now - today_target).total_seconds() / 60
-    intervals_passed = int(elapsed_minutes / repeat_interval) + 1
-    next_trigger = today_target + timedelta(minutes=intervals_passed * repeat_interval)
+    # 重复提醒：只以分钟为准，从基准时间不断加间隔直到超过当前时间
+    # 例如 13:30 每30分钟 → 14:00, 14:30, 15:00, ... 跨天也继续
+    next_trigger = base_time
+    while next_trigger <= now:
+        next_trigger += timedelta(minutes=repeat_interval)
     return next_trigger
 
 
@@ -213,19 +209,21 @@ def reminder_checker():
                     r['next_trigger'] = r['next_trigger'] + timedelta(minutes=r['repeat_interval'])
                     r['_updated'] = True
         has_updates = False
+        need_refresh = False
         for r in to_remove:
             reminders.remove(r)
             has_updates = True
-            root.after(0, refresh_reminder_list)
-        # 重复提醒触发后也需要保存更新后的下次触发时间
-        if not has_updates:
-            for r in reminders:
-                if '_updated' in r:
-                    del r['_updated']
-                    has_updates = True
-                    break
+            need_refresh = True
+        # 重复提醒触发后也需要保存更新后的下次触发时间并刷新列表
+        for r in reminders:
+            if '_updated' in r:
+                del r['_updated']
+                has_updates = True
+                need_refresh = True
         if has_updates:
             save_reminders()
+        if need_refresh:
+            root.after(0, refresh_reminder_list)
         time.sleep(1)
 
 

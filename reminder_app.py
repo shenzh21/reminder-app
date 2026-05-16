@@ -20,6 +20,7 @@ import pystray
 import winsound
 
 # ── 全局状态 ──────────────────────────────────────────────
+APP_VERSION = "1.3.0"
 reminders = []        # 存储所有提醒
 reminder_id_counter = 0
 tray_icon = None
@@ -47,6 +48,7 @@ def save_reminders():
             'message': r['message'],
             'repeat_interval': r['repeat_interval'],
             'enabled': r.get('enabled', True),
+            'sound': r.get('sound', False),
             'next_trigger': r['next_trigger'].strftime('%Y-%m-%d %H:%M:%S') if r['next_trigger'] else None,
         })
     try:
@@ -96,6 +98,7 @@ def load_reminders():
             'message': item['message'],
             'repeat_interval': repeat_interval,
             'enabled': item.get('enabled', True),
+            'sound': item.get('sound', False),
             'next_trigger': next_trigger,
         })
         if item['id'] > reminder_id_counter:
@@ -124,13 +127,14 @@ def create_tray_icon_image():
     return Image.open(io.BytesIO(icon_data))
 
 
-def show_reminder_popup(title, message):
+def show_reminder_popup(title, message, sound=True):
     """弹出提醒窗口（在新线程中运行，避免阻塞）"""
     def _show():
-        try:
-            winsound.Beep(1000, 300)
-        except Exception:
-            pass
+        if sound:
+            try:
+                winsound.Beep(1000, 300)
+            except Exception:
+                pass
 
         popup = tk.Toplevel(root)
         popup.title(title)
@@ -201,7 +205,7 @@ def reminder_checker():
                 to_remove.append(r)
                 continue
             if now >= r['next_trigger']:
-                show_reminder_popup("⏰ 定时提醒", r['message'])
+                show_reminder_popup("⏰ 定时提醒", r['message'], sound=r.get('sound', False))
                 if r['repeat_interval'] is None:
                     to_remove.append(r)
                 else:
@@ -262,6 +266,7 @@ def add_reminder():
         'message': message,
         'repeat_interval': repeat_interval,
         'enabled': True,
+        'sound': False,
         'next_trigger': next_trigger,
     })
     save_reminders()
@@ -288,6 +293,16 @@ def toggle_reminder(rid):
                 if r['next_trigger'] is None:
                     # 一次性提醒已过期，保持关闭
                     r['enabled'] = False
+            break
+    save_reminders()
+    refresh_reminder_list()
+
+
+def toggle_sound(rid):
+    """切换提醒的音效开关"""
+    for r in reminders:
+        if r['id'] == rid:
+            r['sound'] = not r.get('sound', False)
             break
     save_reminders()
     refresh_reminder_list()
@@ -325,7 +340,13 @@ def refresh_reminder_list():
         tk.Button(row, text="✕", font=("微软雅黑", 9), fg='red', bg=row_bg,
                   relief='flat', command=lambda rid=r['id']: delete_reminder(rid)).pack(side='right')
 
-        # 开关按钮
+        # 音效开关按钮
+        is_sound = r.get('sound', False)
+        sound_text = "🔔" if is_sound else "🔕"
+        tk.Button(row, text=sound_text, font=("微软雅黑", 9), bg=row_bg,
+                  relief='flat', command=lambda rid=r['id']: toggle_sound(rid)).pack(side='right', padx=(0, 2))
+
+        # 启停开关按钮
         toggle_text = "⏸" if is_enabled else "▶"
         toggle_fg = '#E6A817' if is_enabled else '#4A90D9'
         tk.Button(row, text=toggle_text, font=("微软雅黑", 10), fg=toggle_fg, bg=row_bg,
@@ -372,7 +393,7 @@ def build_ui():
     global root, hour_var, minute_var, repeat_var, msg_entry, reminder_list_frame
 
     root = tk.Tk()
-    root.title("⏰ 定时提醒")
+    root.title(f"⏰ 定时提醒 v{APP_VERSION}")
     root.geometry("480x520")
     root.resizable(False, False)
     root.configure(bg='#F0F4FF')
@@ -387,7 +408,7 @@ def build_ui():
     title_frame = tk.Frame(root, bg='#4A90D9', height=50)
     title_frame.pack(fill='x')
     title_frame.pack_propagate(False)
-    tk.Label(title_frame, text="⏰ 定时提醒", font=("微软雅黑", 16, "bold"),
+    tk.Label(title_frame, text=f"⏰ 定时提醒 v{APP_VERSION}", font=("微软雅黑", 16, "bold"),
              bg='#4A90D9', fg='white').pack(expand=True)
 
     # ── 设置区域 ──

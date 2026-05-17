@@ -99,10 +99,39 @@ pyinstaller --clean --onedir --windowed --name "定时提醒" ^
 
 ## 🛠 技术栈
 
+### 桌面版
 - **Python 3** + **tkinter**（GUI）
 - **pystray**（系统托盘）
 - **Pillow**（托盘图标生成）
 - **PyInstaller**（打包 exe）
+
+### Web 版
+- **HTML + CSS + JavaScript**（纯前端，无后端依赖）
+- **localStorage**（本地数据持久化）
+- **Web Audio API**（声音提醒）
+- **Notification API**（浏览器通知）
+
+---
+
+## 🌐 Web 版
+
+纯前端实现，一个 HTML 文件即可运行，无需服务器。
+
+### 快速使用
+
+1. 直接在浏览器中打开 `index.html`
+2. 或部署到任意静态托管服务（GitHub Pages、Netlify、Vercel 等）
+
+### 功能特性
+
+- ✅ 一次性提醒和重复提醒
+- ✅ 弹窗 + 声音提醒
+- ✅ 浏览器通知（需授权）
+- ✅ 数据保存在浏览器本地
+- ✅ 默认自带两个提醒：25分（[bell]）和整点（[bell]）
+- ✅ 支持移动端访问
+
+---
 
 ## ⚖️ 许可证
 

@@ -20,7 +20,7 @@ import pystray
 import winsound
 
 # ── 全局状态 ──────────────────────────────────────────────
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 reminders = []        # 存储所有提醒
 reminder_id_counter = 0
 tray_icon = None
@@ -162,6 +162,14 @@ def show_reminder_popup(title, message, sound=True):
                         command=popup.destroy, bg='#4A90D9', fg='white',
                         activebackground='#2C5F9E', activeforeground='white', relief='flat')
         btn.pack(pady=(0, 10))
+        btn.focus_set()
+
+        # Enter / 空格 关闭弹窗
+        popup.bind('<Return>', lambda e: popup.destroy())
+        popup.bind('<space>', lambda e: popup.destroy())
+
+        # 3 分钟后自动关闭
+        popup.after(180000, popup.destroy)
 
         popup.focus_force()
 
@@ -375,7 +383,7 @@ def setup_tray():
     global tray_icon
     icon_image = create_tray_icon_image()
     menu = pystray.Menu(
-        pystray.MenuItem("显示主窗口", restore_from_tray),
+        pystray.MenuItem("显示主窗口", restore_from_tray, default=True),
         pystray.MenuItem("退出", quit_app),
     )
     tray_icon = pystray.Icon("reminder_app", icon_image, "定时提醒", menu)

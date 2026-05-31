@@ -20,7 +20,7 @@ import pystray
 import winsound
 
 # ── 全局状态 ──────────────────────────────────────────────
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.6.0"
 reminders = []        # 存储所有提醒
 reminder_id_counter = 0
 tray_icon = None
@@ -213,7 +213,14 @@ def reminder_checker():
                 to_remove.append(r)
                 continue
             if now >= r['next_trigger']:
-                show_reminder_popup("⏰ 定时提醒", r['message'], sound=r.get('sound', False))
+                # 如果触发时间已超过 180 秒，说明用户在睡眠/锁屏/合盖期间错过，
+                # 弹窗即使弹了也会在 3 分钟后自动消失，现在回来看不到。
+                # 所以静默跳过本次弹窗，只更新下次触发时间。
+                time_since_trigger = (now - r['next_trigger']).total_seconds()
+                if time_since_trigger > 180:
+                    pass  # 不弹窗，静默更新
+                else:
+                    show_reminder_popup("⏰ 定时提醒", r['message'], sound=r.get('sound', False))
                 if r['repeat_interval'] is None:
                     to_remove.append(r)
                 else:

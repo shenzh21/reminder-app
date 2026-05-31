@@ -20,7 +20,7 @@ import pystray
 import winsound
 
 # ── 全局状态 ──────────────────────────────────────────────
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.5.0"
 reminders = []        # 存储所有提醒
 reminder_id_counter = 0
 tray_icon = None
@@ -405,6 +405,8 @@ def build_ui():
     root.geometry("480x520")
     root.resizable(False, False)
     root.configure(bg='#F0F4FF')
+    # 窗口先不显示，由 main() 控制
+    root.withdraw()
 
     # 居中显示
     root.update_idletasks()
@@ -512,6 +514,9 @@ def main():
 
     # 启动系统托盘
     setup_tray()
+
+    # 启动时最小化到托盘，不显示主界面
+    root.withdraw()
 
     # 启动后台提醒检查线程
     checker = threading.Thread(target=reminder_checker, daemon=True)
